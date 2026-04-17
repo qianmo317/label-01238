@@ -520,4 +520,63 @@ class OrderServiceTest {
         assertNotNull(result);
         assertNull(result.getRemark());
     }
+
+    @Test
+    @DisplayName("从购物车创建订单失败 - 多商品第二件库存不足")
+    void createFromCart_MultipleProducts_SecondItemInsufficientStock() {
+        Cart cart2 = new Cart();
+        cart2.setId(2L);
+        cart2.setUserId(1L);
+        cart2.setProductId(2L);
+        cart2.setProductName("MacBook Pro");
+        cart2.setPrice(new BigDecimal("12999.00"));
+        cart2.setQuantity(1);
+        cart2.setSelected(true);
+
+        Product product2 = new Product();
+        product2.setId(2L);
+        product2.setName("MacBook Pro");
+        product2.setPrice(new BigDecimal("12999.00"));
+        product2.setStock(0);
+
+        List<Cart> carts = Arrays.asList(testCart, cart2);
+        when(cartMapper.findByUserId(1L)).thenReturn(carts);
+        when(productMapper.findById(1L)).thenReturn(testProduct);
+        when(productMapper.findById(2L)).thenReturn(product2);
+
+        assertThrows(RuntimeException.class, () ->
+            orderService.createFromCart(1L, "测试地址", "张三", "13800138000", "备注"));
+
+        verify(orderMapper, never()).insert(any(Order.class));
+    }
+
+    @Test
+    @DisplayName("从购物车创建订单失败 - 多商品第一件库存不足")
+    void createFromCart_MultipleProducts_FirstItemInsufficientStock() {
+        Cart cart2 = new Cart();
+        cart2.setId(2L);
+        cart2.setUserId(1L);
+        cart2.setProductId(2L);
+        cart2.setProductName("MacBook Pro");
+        cart2.setPrice(new BigDecimal("12999.00"));
+        cart2.setQuantity(1);
+        cart2.setSelected(true);
+
+        Product product2 = new Product();
+        product2.setId(2L);
+        product2.setName("MacBook Pro");
+        product2.setPrice(new BigDecimal("12999.00"));
+        product2.setStock(50);
+
+        testProduct.setStock(0);
+        List<Cart> carts = Arrays.asList(testCart, cart2);
+        when(cartMapper.findByUserId(1L)).thenReturn(carts);
+        when(productMapper.findById(1L)).thenReturn(testProduct);
+        when(productMapper.findById(2L)).thenReturn(product2);
+
+        assertThrows(RuntimeException.class, () ->
+            orderService.createFromCart(1L, "测试地址", "张三", "13800138000", "备注"));
+
+        verify(orderMapper, never()).insert(any(Order.class));
+    }
 }
