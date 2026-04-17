@@ -520,4 +520,86 @@ class OrderServiceTest {
         assertNotNull(result);
         assertNull(result.getRemark());
     }
+
+    @Test
+    @DisplayName("从购物车创建订单 - 库存刚好等于购买数量")
+    void createFromCart_StockEqualsQuantity() {
+        testProduct.setStock(1); // 初始库存为1
+        testCart.setQuantity(1); // 购买数量为1
+        List<Cart> carts = Collections.singletonList(testCart);
+        
+        when(cartMapper.findByUserId(1L)).thenReturn(carts);
+        when(productMapper.findById(1L)).thenReturn(testProduct);
+        when(orderMapper.insert(any(Order.class))).thenReturn(1);
+        when(orderMapper.insertOrderItem(any(OrderItem.class))).thenReturn(1);
+        when(productMapper.updateStock(anyLong(), anyInt())).thenReturn(1);
+        when(productMapper.updateSales(anyLong(), anyInt())).thenReturn(1);
+        when(cartMapper.deleteSelected(1L)).thenReturn(1);
+
+        Order result = orderService.createFromCart(1L, "测试地址", "张三", "13800138000", "备注");
+
+        assertNotNull(result);
+        // 验证订单已创建
+        verify(orderMapper).insert(any(Order.class));
+        // 验证库存扣减1个（从1变为0）
+        verify(productMapper).updateStock(1L, 1);
+        // 验证销量增加1个
+        verify(productMapper).updateSales(1L, 1);
+        // 验证购物车已清空选中商品
+        verify(cartMapper).deleteSelected(1L);
+    }
+
+    @Test
+    @DisplayName("从购物车创建订单失败 - 多商品其中一个库存不足")
+    void createFromCart_MultipleProducts_OneInsufficientStock() {
+        // 第一个商品库存足够
+        Cart cart1 = new Cart();
+        cart1.setId(1L);
+        cart1.setUserId(1L);
+        cart1.setProductId(1L);
+        cart1.setProductName("iPhone 15");
+        cart1.setPrice(new BigDecimal("6999.00"));
+        cart1.setQuantity(1);
+        cart1.setSelected(true);
+
+        Product product1 = new Product();
+        product1.setId(1L);
+        product1.setName("iPhone 15");
+        product1.setPrice(new BigDecimal("6999.00"));
+        product1.setStock(10);
+
+        // 第二个商品库存不足
+        Cart cart2 = new Cart();
+        cart2.setId(2L);
+        cart2.setUserId(1L);
+        cart2.setProductId(2L);
+        cart2.setProductName("MacBook Pro");
+        cart2.setPrice(new BigDecimal("12999.00"));
+        cart2.setQuantity(2);
+        cart2.setSelected(true);
+
+        Product product2 = new Product();
+        product2.setId(2L);
+        product2.setName("MacBook Pro");
+        product2.setPrice(new BigDecimal("12999.00"));
+        product2.setStock(1); // 库存只有1，不足以购买2个
+
+        List<Cart> carts = Arrays.asList(cart1, cart2);
+        when(cartMapper.findByUserId(1L)).thenReturn(carts);
+        when(productMapper.findById(1L)).thenReturn(product1);
+        when(productMapper.findById(2L)).thenReturn(product2);
+
+        // 应该抛出异常，订单创建失败
+        assertThrows(RuntimeException.class, () ->
+            orderService.createFromCart(1L, "测试地址", "张三", "13800138000", "备注"));
+        
+        // 验证订单没有被创建
+        verify(orderMapper, never()).insert(any(Order.class));
+        // 验证库存没有被修改
+        verify(productMapper, never()).updateStock(anyLong(), anyInt());
+        // 验证销量没有被修改
+        verify(productMapper, never()).updateSales(anyLong(), anyInt());
+        // 验证购物车没有被清空
+        verify(cartMapper, never()).deleteSelected(anyLong());
+    }
 }
